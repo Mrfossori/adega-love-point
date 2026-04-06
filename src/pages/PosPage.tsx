@@ -1,24 +1,41 @@
-import { useState } from 'react';
-import { Product, Sale, SaleItem } from '@/lib/types';
-import { getProducts, addSale } from '@/lib/store';
+import { useState, useEffect, useCallback } from 'react';
+import { Product, getProductsWithStock, createSale } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, ShoppingCart, CreditCard, Banknote, Smartphone, X } from 'lucide-react';
+import { Trash2, ShoppingCart, CreditCard, Banknote, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 
+interface CartItem {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+}
+
 export default function PosPage() {
-  const [products] = useState<Product[]>(getProducts().filter(p => p.is_active));
-  const [items, setItems] = useState<SaleItem[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [items, setItems] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<Sale['payment_method']>('cash');
-  const [saleType, setSaleType] = useState<Sale['sale_type']>('presencial');
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [saleType, setSaleType] = useState<string>('presencial');
+
+  const loadProducts = useCallback(async () => {
+    try {
+      const data = await getProductsWithStock();
+      setProducts(data.filter(p => p.is_active));
+    } catch (e: any) {
+      toast.error('Erro: ' + e.message);
+    }
+  }, []);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const total = items.reduce((s, i) => s + i.subtotal, 0);
 
   const filtered = search.trim()
-    ? products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search))
+    ? products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode || '').includes(search))
     : [];
 
   function addItem(p: Product) {
@@ -34,8 +51,8 @@ export default function PosPage() {
         product_id: p.id,
         product_name: p.name,
         quantity: 1,
-        unit_price: p.sale_price,
-        subtotal: p.sale_price,
+        unit_price: Number(p.sale_price),
+        subtotal: Number(p.sale_price),
       }];
     });
     setSearch('');
@@ -53,19 +70,25 @@ export default function PosPage() {
     ));
   }
 
-  function finalizeSale() {
+  async function finalizeSale() {
     if (items.length === 0) return;
-    const sale: Sale = {
-      id: crypto.randomUUID(),
-      items: [...items],
-      total,
-      payment_method: paymentMethod,
-      sale_type: saleType,
-      created_at: new Date().toISOString(),
-    };
-    addSale(sale);
-    setItems([]);
-    toast.success(`Venda registrada! Total: R$ ${total.toFixed(2)}`);
+    try {
+      await createSale(
+        { total, payment_method: paymentMethod, sale_type: saleType },
+        items.map(i => ({
+          product_id: i.product_id,
+          product_name: i.product_name,
+          quantity: i.quantity,
+          unit_price: i.unit_price,
+          subtotal: i.subtotal,
+        }))
+      );
+      setItems([]);
+      toast.success(`Venda registrada! Total: R$ ${total.toFixed(2)}`);
+      await loadProducts();
+    } catch (e: any) {
+      toast.error('Erro ao registrar venda: ' + e.message);
+    }
   }
 
   const paymentOptions = [
@@ -77,7 +100,6 @@ export default function PosPage() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-8rem)]">
-      {/* Product search */}
       <div className="lg:col-span-2 space-y-3">
         <div className="relative">
           <Input
@@ -98,13 +120,12 @@ export default function PosPage() {
                 className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors border-b last:border-0"
               >
                 <span className="text-lg">{p.name}</span>
-                <span className="text-lg font-bold text-accent">R$ {p.sale_price.toFixed(2)}</span>
+                <span className="text-lg font-bold text-accent">R$ {Number(p.sale_price).toFixed(2)}</span>
               </button>
             ))}
           </div>
         )}
 
-        {/* Cart items */}
         <div className="flex-1 space-y-2 overflow-y-auto">
           {items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
@@ -131,7 +152,6 @@ export default function PosPage() {
         </div>
       </div>
 
-      {/* Sidebar - Payment */}
       <div className="bg-card border rounded-lg p-4 flex flex-col gap-4">
         <div>
           <Label className="text-base">Tipo de Venda</Label>

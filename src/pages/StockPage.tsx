@@ -1,6 +1,5 @@
-import { useState } from 'react';
-import { Product, StockMovement } from '@/lib/types';
-import { getProducts, addMovement, getLowStockProducts, getMovements } from '@/lib/store';
+import { useState, useEffect, useCallback } from 'react';
+import { Product, getProductsWithStock, getLowStockProducts, addInventoryMovement } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,20 +7,31 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle, ArrowDownToLine, SlidersHorizontal, Package } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 
 export default function StockPage() {
-  const [products, setProducts] = useState<Product[]>(getProducts());
-  const [lowStock, setLowStock] = useState<Product[]>(getLowStockProducts());
+  const [products, setProducts] = useState<Product[]>([]);
+  const [lowStock, setLowStock] = useState<Product[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [movType, setMovType] = useState<'entry' | 'adjustment'>('entry');
   const [selectedProductId, setSelectedProductId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  function refresh() {
-    setProducts(getProducts());
-    setLowStock(getLowStockProducts());
-  }
+  const refresh = useCallback(async () => {
+    try {
+      const [prods, low] = await Promise.all([getProductsWithStock(), getLowStockProducts()]);
+      setProducts(prods);
+      setLowStock(low);
+    } catch (e: any) {
+      toast.error('Erro: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   function openDialog(type: 'entry' | 'adjustment') {
     setMovType(type);
@@ -31,19 +41,41 @@ export default function StockPage() {
     setDialogOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!selectedProductId || !quantity) return;
-    addMovement({
-      id: crypto.randomUUID(),
-      product_id: selectedProductId,
-      type: movType,
-      quantity: +quantity,
-      note,
-      created_at: new Date().toISOString(),
-    });
-    refresh();
-    setDialogOpen(false);
+    try {
+      if (movType === 'entry') {
+        await addInventoryMovement({
+          product_id: selectedProductId,
+          direction: 'IN',
+          reason: 'purchase',
+          quantity: +quantity,
+          note,
+        });
+      } else {
+        // Adjustment: calculate delta from current stock
+        const current = products.find(p => p.id === selectedProductId);
+        const currentStock = current?.stock || 0;
+        const newStock = +quantity;
+        const delta = newStock - currentStock;
+        if (delta === 0) { setDialogOpen(false); return; }
+        await addInventoryMovement({
+          product_id: selectedProductId,
+          direction: delta > 0 ? 'IN' : 'OUT',
+          reason: 'adjustment',
+          quantity: Math.abs(delta),
+          note: note || `Ajuste: ${currentStock} → ${newStock}`,
+        });
+      }
+      toast.success('Movimentação registrada!');
+      setDialogOpen(false);
+      await refresh();
+    } catch (e: any) {
+      toast.error('Erro: ' + e.message);
+    }
   }
+
+  if (loading) return <p className="text-center text-muted-foreground py-12 text-lg">Carregando...</p>;
 
   return (
     <div className="space-y-4">

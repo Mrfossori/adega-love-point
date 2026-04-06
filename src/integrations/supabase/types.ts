@@ -14,16 +14,208 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      inventory_movements: {
+        Row: {
+          created_at: string
+          direction: Database["public"]["Enums"]["movement_direction"]
+          id: string
+          note: string | null
+          product_id: string
+          quantity: number
+          reason: Database["public"]["Enums"]["movement_reason"]
+        }
+        Insert: {
+          created_at?: string
+          direction: Database["public"]["Enums"]["movement_direction"]
+          id?: string
+          note?: string | null
+          product_id: string
+          quantity: number
+          reason: Database["public"]["Enums"]["movement_reason"]
+        }
+        Update: {
+          created_at?: string
+          direction?: Database["public"]["Enums"]["movement_direction"]
+          id?: string
+          note?: string | null
+          product_id?: string
+          quantity?: number
+          reason?: Database["public"]["Enums"]["movement_reason"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          barcode: string | null
+          cost_price: number
+          created_at: string
+          id: string
+          is_active: boolean
+          min_stock: number
+          name: string
+          sale_price: number
+          updated_at: string
+        }
+        Insert: {
+          barcode?: string | null
+          cost_price?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          min_stock?: number
+          name: string
+          sale_price?: number
+          updated_at?: string
+        }
+        Update: {
+          barcode?: string | null
+          cost_price?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          min_stock?: number
+          name?: string
+          sale_price?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sales_order_items: {
+        Row: {
+          created_at: string
+          id: string
+          order_id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          subtotal: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          subtotal: number
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_id?: string
+          product_id?: string
+          product_name?: string
+          quantity?: number
+          subtotal?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "sales_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_sales_report"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_orders: {
+        Row: {
+          created_at: string
+          id: string
+          payment_method: string
+          sale_type: string
+          total: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          payment_method?: string
+          sale_type?: string
+          total?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          payment_method?: string
+          sale_type?: string
+          total?: number
+        }
+        Relationships: []
+      }
+      stock_snapshot: {
+        Row: {
+          id: string
+          product_id: string
+          quantity: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          quantity?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          product_id?: string
+          quantity?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_snapshot_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      v_sales_report: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          payment_method: string | null
+          sale_type: string | null
+          total: number | null
+          total_items: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      movement_direction: "IN" | "OUT"
+      movement_reason: "purchase" | "sale" | "adjustment"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +342,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      movement_direction: ["IN", "OUT"],
+      movement_reason: ["purchase", "sale", "adjustment"],
+    },
   },
 } as const

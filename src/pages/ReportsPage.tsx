@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
-import { getSales } from '@/lib/store';
-import { Button } from '@/components/ui/button';
+import { useState, useMemo, useEffect } from 'react';
+import { SalesReport, getSalesReport } from '@/lib/store';
+import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BarChart3, Banknote, CreditCard, Smartphone } from 'lucide-react';
+import { toast } from 'sonner';
 
 const paymentLabels: Record<string, string> = {
   cash: 'Dinheiro', credit: 'Crédito', debit: 'Débito', pix: 'PIX',
@@ -13,19 +13,30 @@ export default function ReportsPage() {
   const today = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [sales, setSales] = useState<SalesReport[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const sales = useMemo(() => {
-    return getSales().filter(s => {
-      const d = s.created_at.slice(0, 10);
-      return d >= startDate && d <= endDate;
-    });
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        const data = await getSalesReport(startDate, endDate);
+        setSales(data);
+      } catch (e: any) {
+        toast.error('Erro: ' + e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, [startDate, endDate]);
 
-  const totalSold = sales.reduce((s, sale) => s + sale.total, 0);
-  const totalItems = sales.reduce((s, sale) => s + sale.items.reduce((a, i) => a + i.quantity, 0), 0);
+  const totalSold = sales.reduce((s, sale) => s + (sale.total || 0), 0);
+  const totalItems = sales.reduce((s, sale) => s + (Number(sale.total_items) || 0), 0);
 
   const byPayment = sales.reduce<Record<string, number>>((acc, sale) => {
-    acc[sale.payment_method] = (acc[sale.payment_method] || 0) + sale.total;
+    const method = sale.payment_method || 'cash';
+    acc[method] = (acc[method] || 0) + (sale.total || 0);
     return acc;
   }, {});
 
@@ -42,7 +53,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-card border rounded-lg p-6 text-center">
           <p className="text-muted-foreground text-sm">Total Vendido</p>
@@ -58,7 +68,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* By payment method */}
       {Object.keys(byPayment).length > 0 && (
         <div className="bg-card border rounded-lg p-4">
           <h3 className="text-lg font-semibold mb-3">Por Forma de Pagamento</h3>
@@ -73,31 +82,30 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Sales list */}
       <div className="space-y-2">
         <h3 className="text-lg font-semibold">Lista de Vendas</h3>
-        {sales.length === 0 ? (
+        {loading ? (
+          <p className="text-center text-muted-foreground py-12 text-lg">Carregando...</p>
+        ) : sales.length === 0 ? (
           <p className="text-center text-muted-foreground py-12 text-lg">Nenhuma venda no período selecionado.</p>
-        ) : sales.sort((a, b) => b.created_at.localeCompare(a.created_at)).map(sale => (
+        ) : sales.map(sale => (
           <div key={sale.id} className="bg-card border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-muted-foreground">
-                  {new Date(sale.created_at).toLocaleString('pt-BR')}
+                  {sale.created_at ? new Date(sale.created_at).toLocaleString('pt-BR') : '—'}
                 </span>
                 <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">
                   {sale.sale_type === 'presencial' ? 'Presencial' : 'Delivery'}
                 </span>
                 <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent">
-                  {paymentLabels[sale.payment_method]}
+                  {paymentLabels[sale.payment_method || ''] || sale.payment_method}
                 </span>
               </div>
-              <span className="text-xl font-bold text-accent">R$ {sale.total.toFixed(2)}</span>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {sale.items.map((item, i) => (
-                <span key={i}>{item.quantity}x {item.product_name}{i < sale.items.length - 1 ? ' · ' : ''}</span>
-              ))}
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-muted-foreground">{Number(sale.total_items)} itens</span>
+                <span className="text-xl font-bold text-accent">R$ {Number(sale.total).toFixed(2)}</span>
+              </div>
             </div>
           </div>
         ))}

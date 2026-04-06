@@ -1,31 +1,40 @@
-import { useState } from 'react';
-import { Product } from '@/lib/types';
-import { getProducts, saveProduct } from '@/lib/store';
+import { useState, useEffect, useCallback } from 'react';
+import { Product, upsertProduct, getProductsWithStock } from '@/lib/store';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Search, Plus, Edit, Package } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(getProducts());
+  const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
-  const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [editProduct, setEditProduct] = useState<Partial<Product> | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const loadProducts = useCallback(async () => {
+    try {
+      const data = await getProductsWithStock();
+      setProducts(data);
+    } catch (e: any) {
+      toast.error('Erro ao carregar produtos: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const filtered = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.barcode.includes(search)
+    (p.barcode || '').includes(search)
   );
 
-  const emptyProduct: Product = {
-    id: '', name: '', barcode: '', sale_price: 0, cost_price: 0,
-    min_stock: 0, is_active: true, stock: 0,
-  };
-
   function openNew() {
-    setEditProduct({ ...emptyProduct, id: crypto.randomUUID() });
+    setEditProduct({ name: '', barcode: '', sale_price: 0, cost_price: 0, min_stock: 0, is_active: true });
     setDialogOpen(true);
   }
 
@@ -34,13 +43,28 @@ export default function ProductsPage() {
     setDialogOpen(true);
   }
 
-  function handleSave() {
-    if (!editProduct || !editProduct.name.trim()) return;
-    saveProduct(editProduct);
-    setProducts(getProducts());
-    setDialogOpen(false);
-    setEditProduct(null);
+  async function handleSave() {
+    if (!editProduct || !editProduct.name?.trim()) return;
+    try {
+      await upsertProduct({
+        ...(editProduct.id ? { id: editProduct.id } : {}),
+        name: editProduct.name!,
+        barcode: editProduct.barcode || '',
+        sale_price: editProduct.sale_price || 0,
+        cost_price: editProduct.cost_price || 0,
+        min_stock: editProduct.min_stock || 0,
+        is_active: editProduct.is_active ?? true,
+      });
+      toast.success('Produto salvo!');
+      setDialogOpen(false);
+      setEditProduct(null);
+      await loadProducts();
+    } catch (e: any) {
+      toast.error('Erro ao salvar: ' + e.message);
+    }
   }
+
+  if (loading) return <p className="text-center text-muted-foreground py-12 text-lg">Carregando...</p>;
 
   return (
     <div className="space-y-4">
@@ -71,8 +95,8 @@ export default function ProductsPage() {
             </div>
             <div className="flex items-center gap-6">
               <div className="text-right">
-                <p className="text-lg font-bold text-accent">R$ {p.sale_price.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Custo: R$ {p.cost_price.toFixed(2)}</p>
+                <p className="text-lg font-bold text-accent">R$ {Number(p.sale_price).toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Custo: R$ {Number(p.cost_price).toFixed(2)}</p>
               </div>
               <div className="text-right min-w-[80px]">
                 <p className={`text-lg font-bold ${p.stock <= p.min_stock ? 'text-destructive' : 'text-success'}`}>
@@ -97,17 +121,17 @@ export default function ProductsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl">{editProduct?.name ? 'Editar Produto' : 'Novo Produto'}</DialogTitle>
+            <DialogTitle className="text-xl">{editProduct?.id ? 'Editar Produto' : 'Novo Produto'}</DialogTitle>
           </DialogHeader>
           {editProduct && (
             <div className="space-y-4">
               <div>
                 <Label>Nome</Label>
-                <Input value={editProduct.name} onChange={e => setEditProduct({ ...editProduct, name: e.target.value })} className="h-12 text-lg" />
+                <Input value={editProduct.name || ''} onChange={e => setEditProduct({ ...editProduct, name: e.target.value })} className="h-12 text-lg" />
               </div>
               <div>
                 <Label>Código de barras</Label>
-                <Input value={editProduct.barcode} onChange={e => setEditProduct({ ...editProduct, barcode: e.target.value })} className="h-12" />
+                <Input value={editProduct.barcode || ''} onChange={e => setEditProduct({ ...editProduct, barcode: e.target.value })} className="h-12" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -124,7 +148,7 @@ export default function ProductsPage() {
                 <Input type="number" value={editProduct.min_stock || ''} onChange={e => setEditProduct({ ...editProduct, min_stock: +e.target.value })} className="h-12" />
               </div>
               <div className="flex items-center gap-3">
-                <Switch checked={editProduct.is_active} onCheckedChange={v => setEditProduct({ ...editProduct, is_active: v })} />
+                <Switch checked={editProduct.is_active ?? true} onCheckedChange={v => setEditProduct({ ...editProduct, is_active: v })} />
                 <Label>Produto ativo</Label>
               </div>
               <Button onClick={handleSave} className="w-full h-14 text-lg">Salvar</Button>

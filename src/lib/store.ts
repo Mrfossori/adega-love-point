@@ -1,71 +1,93 @@
-import { Product, StockMovement, Sale } from './types';
+import { supabase } from '@/integrations/supabase/client';
+import type { Tables, TablesInsert } from '@/integrations/supabase/types';
 
-const PRODUCTS_KEY = 'adega_products';
-const MOVEMENTS_KEY = 'adega_movements';
-const SALES_KEY = 'adega_sales';
+export type Product = Tables<'products'> & { stock: number };
+export type StockSnapshot = Tables<'stock_snapshot'>;
+export type InventoryMovement = Tables<'inventory_movements'>;
+export type SalesOrder = Tables<'sales_orders'>;
+export type SalesOrderItem = Tables<'sales_order_items'>;
+export type SalesReport = Tables<'v_sales_report'>;
 
-function load<T>(key: string): T[] {
-  try {
-    return JSON.parse(localStorage.getItem(key) || '[]');
-  } catch { return []; }
+export async function getProductsWithStock(): Promise<Product[]> {
+  const { data: products, error: pErr } = await supabase
+    .from('products')
+    .select('*')
+    .order('name');
+  if (pErr) throw pErr;
+
+  const { data: snapshots, error: sErr } = await supabase
+    .from('stock_snapshot')
+    .select('*');
+  if (sErr) throw sErr;
+
+  const stockMap = new Map(snapshots?.map(s => [s.product_id, s.quantity]) || []);
+  return (products || []).map(p => ({ ...p, stock: stockMap.get(p.id) || 0 }));
 }
 
-function save<T>(key: string, data: T[]) {
-  localStorage.setItem(key, JSON.stringify(data));
+export async function upsertProduct(product: TablesInsert<'products'>) {
+  const { error } = await supabase
+    .from('products')
+    .upsert(product);
+  if (error) throw error;
 }
 
-export function getProducts(): Product[] {
-  return load<Product>(PRODUCTS_KEY);
+export async function addInventoryMovement(mov: TablesInsert<'inventory_movements'>) {
+  const { error } = await supabase
+    .from('inventory_movements')
+    .insert(mov);
+  if (error) throw error;
 }
 
-export function saveProduct(product: Product) {
-  const products = getProducts();
-  const idx = products.findIndex(p => p.id === product.id);
-  if (idx >= 0) products[idx] = product;
-  else products.push(product);
-  save(PRODUCTS_KEY, products);
+export async function createSale(
+  order: Omit<TablesInsert<'sales_orders'>, 'id'>,
+  items: Omit<TablesInsert<'sales_order_items'>, 'id' | 'order_id'>[]
+) {
+  // Insert order
+  const { data: orderData, error: oErr } = await supabase
+    .from('sales_orders')
+    .insert(order)
+    .select()
+    .single();
+  if (oErr) throw oErr;
+
+  // Insert items
+  const orderItems = items.map(item => ({
+    ...item,
+    order_id: orderData.id,
+  }));
+  const { error: iErr } = await supabase
+    .from('sales_order_items')
+    .insert(orderItems);
+  if (iErr) throw iErr;
+
+  // Create OUT movements for each item (triggers stock update)
+  const movements = items.map(item => ({
+    product_id: item.product_id,
+    direction: 'OUT' as const,
+    reason: 'sale' as const,
+    quantity: item.quantity,
+    note: `Venda ${orderData.id}`,
+  }));
+  const { error: mErr } = await supabase
+    .from('inventory_movements')
+    .insert(movements);
+  if (mErr) throw mErr;
+
+  return orderData;
 }
 
-export function getMovements(): StockMovement[] {
-  return load<StockMovement>(MOVEMENTS_KEY);
+export async function getSalesReport(startDate: string, endDate: string): Promise<SalesReport[]> {
+  const { data, error } = await supabase
+    .from('v_sales_report')
+    .select('*')
+    .gte('created_at', `${startDate}T00:00:00`)
+    .lte('created_at', `${endDate}T23:59:59`)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
 }
 
-export function addMovement(mov: StockMovement) {
-  const movements = getMovements();
-  movements.push(mov);
-  save(MOVEMENTS_KEY, movements);
-
-  const products = getProducts();
-  const product = products.find(p => p.id === mov.product_id);
-  if (product) {
-    if (mov.type === 'entry') product.stock += mov.quantity;
-    else if (mov.type === 'adjustment') product.stock = mov.quantity;
-    else if (mov.type === 'sale') product.stock -= mov.quantity;
-    save(PRODUCTS_KEY, products);
-  }
-}
-
-export function getSales(): Sale[] {
-  return load<Sale>(SALES_KEY);
-}
-
-export function addSale(sale: Sale) {
-  const sales = getSales();
-  sales.push(sale);
-  save(SALES_KEY, sales);
-  // Deduct stock
-  sale.items.forEach(item => {
-    addMovement({
-      id: crypto.randomUUID(),
-      product_id: item.product_id,
-      type: 'sale',
-      quantity: item.quantity,
-      note: `Venda ${sale.id}`,
-      created_at: sale.created_at,
-    });
-  });
-}
-
-export function getLowStockProducts(): Product[] {
-  return getProducts().filter(p => p.is_active && p.stock <= p.min_stock);
+export async function getLowStockProducts(): Promise<Product[]> {
+  const products = await getProductsWithStock();
+  return products.filter(p => p.is_active && p.stock <= p.min_stock);
 }

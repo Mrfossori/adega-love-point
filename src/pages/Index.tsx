@@ -1,16 +1,55 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from 'react';
+import { Package, Warehouse, ShoppingCart, BarChart3, Wine } from 'lucide-react';
+import ProductsPage from '@/pages/ProductsPage';
+import StockPage from '@/pages/StockPage';
+import PosPage from '@/pages/PosPage';
+import ReportsPage from '@/pages/ReportsPage';
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+const tabs = [
+  { id: 'pos', label: 'PDV', icon: ShoppingCart },
+  { id: 'products', label: 'Produtos', icon: Package },
+  { id: 'stock', label: 'Estoque', icon: Warehouse },
+  { id: 'reports', label: 'Relatórios', icon: BarChart3 },
+] as const;
+
+type Tab = typeof tabs[number]['id'];
+
+export default function Index() {
+  const [activeTab, setActiveTab] = useState<Tab>('pos');
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
+    <div className="min-h-screen flex flex-col">
+      {/* Header */}
+      <header className="bg-card border-b px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Wine className="h-8 w-8 text-primary" />
+          <h1 className="text-2xl font-bold">Adega<span className="text-primary">ERP</span></h1>
+        </div>
+        <nav className="flex gap-1">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-5 py-3 rounded-lg text-base font-medium transition-colors
+                ${activeTab === tab.id
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-muted text-muted-foreground'
+                }`}
+            >
+              <tab.icon className="h-5 w-5" />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      {/* Content */}
+      <main className="flex-1 p-6 overflow-y-auto">
+        {activeTab === 'pos' && <PosPage />}
+        {activeTab === 'products' && <ProductsPage />}
+        {activeTab === 'stock' && <StockPage />}
+        {activeTab === 'reports' && <ReportsPage />}
+      </main>
     </div>
   );
-};
-
-const Index = PlaceholderIndex;
-
-export default Index;
+}

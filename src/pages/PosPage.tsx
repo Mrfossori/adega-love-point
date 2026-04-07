@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Product, getProductsWithStock, createSale } from '@/lib/store';
+import { Product, getProductsWithStock, createSale, validateStockForSale } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Trash2, ShoppingCart, CreditCard, Banknote, Smartphone } from 'lucide-react';
+import { Trash2, ShoppingCart, CreditCard, Banknote, Smartphone, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CartItem {
@@ -12,6 +12,7 @@ interface CartItem {
   quantity: number;
   unit_price: number;
   subtotal: number;
+  is_combo: boolean;
 }
 
 export default function PosPage() {
@@ -20,6 +21,7 @@ export default function PosPage() {
   const [search, setSearch] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [saleType, setSaleType] = useState<string>('presencial');
+  const [submitting, setSubmitting] = useState(false);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -53,6 +55,7 @@ export default function PosPage() {
         quantity: 1,
         unit_price: Number(p.sale_price),
         subtotal: Number(p.sale_price),
+        is_combo: p.is_combo,
       }];
     });
     setSearch('');
@@ -71,8 +74,21 @@ export default function PosPage() {
   }
 
   async function finalizeSale() {
-    if (items.length === 0) return;
+    if (items.length === 0 || submitting) return;
+    setSubmitting(true);
     try {
+      // Validate stock
+      const errors = await validateStockForSale(
+        items.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+        products,
+      );
+      if (errors.length > 0) {
+        const msgs = errors.map(e => `${e.productName}: disponível ${e.available}, necessário ${e.needed}`);
+        toast.error(`Estoque insuficiente!\n${msgs.join('\n')}`, { duration: 6000 });
+        setSubmitting(false);
+        return;
+      }
+
       await createSale(
         { total, payment_method: paymentMethod, sale_type: saleType },
         items.map(i => ({
@@ -81,13 +97,16 @@ export default function PosPage() {
           quantity: i.quantity,
           unit_price: i.unit_price,
           subtotal: i.subtotal,
-        }))
+        })),
+        products,
       );
       setItems([]);
       toast.success(`Venda registrada! Total: R$ ${total.toFixed(2)}`);
       await loadProducts();
     } catch (e: any) {
       toast.error('Erro ao registrar venda: ' + e.message);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -119,7 +138,10 @@ export default function PosPage() {
                 onClick={() => addItem(p)}
                 className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors border-b last:border-0"
               >
-                <span className="text-lg">{p.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{p.name}</span>
+                  {p.is_combo && <Layers className="h-4 w-4 text-accent" />}
+                </div>
                 <span className="text-lg font-bold text-accent">R$ {Number(p.sale_price).toFixed(2)}</span>
               </button>
             ))}
@@ -135,7 +157,10 @@ export default function PosPage() {
           ) : items.map(item => (
             <div key={item.product_id} className="flex items-center gap-4 bg-card rounded-lg p-4 border">
               <div className="flex-1">
-                <p className="text-lg font-medium">{item.product_name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-lg font-medium">{item.product_name}</p>
+                  {item.is_combo && <span className="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent">Combo</span>}
+                </div>
                 <p className="text-sm text-muted-foreground">R$ {item.unit_price.toFixed(2)} cada</p>
               </div>
               <div className="flex items-center gap-2">
@@ -195,10 +220,10 @@ export default function PosPage() {
           </div>
           <Button
             onClick={finalizeSale}
-            disabled={items.length === 0}
+            disabled={items.length === 0 || submitting}
             className="w-full h-16 text-xl gap-2"
           >
-            <ShoppingCart className="h-6 w-6" /> Registrar Venda
+            <ShoppingCart className="h-6 w-6" /> {submitting ? 'Processando...' : 'Registrar Venda'}
           </Button>
         </div>
       </div>

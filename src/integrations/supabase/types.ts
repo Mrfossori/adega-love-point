@@ -52,6 +52,42 @@ export type Database = {
           },
         ]
       }
+      product_components: {
+        Row: {
+          combo_product_id: string
+          component_product_id: string
+          component_qty: number
+          id: string
+        }
+        Insert: {
+          combo_product_id: string
+          component_product_id: string
+          component_qty: number
+          id?: string
+        }
+        Update: {
+          combo_product_id?: string
+          component_product_id?: string
+          component_qty?: number
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_components_combo_product_id_fkey"
+            columns: ["combo_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_components_component_product_id_fkey"
+            columns: ["component_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           barcode: string | null
@@ -59,9 +95,11 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          is_combo: boolean
           min_stock: number
           name: string
           sale_price: number
+          track_stock: boolean
           updated_at: string
         }
         Insert: {
@@ -70,9 +108,11 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_combo?: boolean
           min_stock?: number
           name: string
           sale_price?: number
+          track_stock?: boolean
           updated_at?: string
         }
         Update: {
@@ -81,9 +121,11 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_combo?: boolean
           min_stock?: number
           name?: string
           sale_price?: number
+          track_stock?: boolean
           updated_at?: string
         }
         Relationships: []

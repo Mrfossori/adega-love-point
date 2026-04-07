@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Product, getProductsWithStock, getLowStockProducts, addInventoryMovement } from '@/lib/store';
+import { downloadCsv, copyCsvToClipboard } from '@/lib/csv';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, ArrowDownToLine, SlidersHorizontal, Package } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, SlidersHorizontal, Package, Download, Copy } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
@@ -18,6 +19,7 @@ export default function StockPage() {
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('all');
 
   const refresh = useCallback(async () => {
     try {
@@ -53,7 +55,6 @@ export default function StockPage() {
           note,
         });
       } else {
-        // Adjustment: calculate delta from current stock
         const current = products.find(p => p.id === selectedProductId);
         const currentStock = current?.stock || 0;
         const newStock = +quantity;
@@ -75,6 +76,26 @@ export default function StockPage() {
     }
   }
 
+  function getExportData() {
+    const source = activeTab === 'low' ? lowStock : products.filter(p => p.is_active);
+    const headers = ['product_id', 'name', 'barcode', 'sale_price', 'cost_price', 'min_stock', 'current_stock', 'is_active'];
+    const rows = source.map(p => [p.id, p.name, p.barcode || '', Number(p.sale_price), Number(p.cost_price), p.min_stock, p.stock, p.is_active ? 'Sim' : 'Não']);
+    return { headers, rows };
+  }
+
+  function handleExportCsv() {
+    const { headers, rows } = getExportData();
+    const suffix = activeTab === 'low' ? '_estoque_baixo' : '_estoque';
+    downloadCsv(`adega${suffix}_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    toast.success('CSV exportado!');
+  }
+
+  function handleCopyCsv() {
+    const { headers, rows } = getExportData();
+    copyCsvToClipboard(headers, rows);
+    toast.success('Copiado! Cole no Google Sheets.');
+  }
+
   if (loading) return <p className="text-center text-muted-foreground py-12 text-lg">Carregando...</p>;
 
   return (
@@ -88,7 +109,16 @@ export default function StockPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="all">
+      <div className="flex gap-2 justify-end">
+        <Button onClick={handleExportCsv} variant="outline" size="sm" className="gap-2">
+          <Download className="h-4 w-4" /> Exportar CSV
+        </Button>
+        <Button onClick={handleCopyCsv} variant="outline" size="sm" className="gap-2">
+          <Copy className="h-4 w-4" /> Copiar p/ Sheets
+        </Button>
+      </div>
+
+      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="h-12">
           <TabsTrigger value="all" className="text-base px-6 h-10">Todos os Produtos</TabsTrigger>
           <TabsTrigger value="low" className="text-base px-6 h-10 gap-2">
@@ -102,6 +132,7 @@ export default function StockPage() {
               <div className="flex items-center gap-3">
                 <Package className="h-6 w-6 text-primary" />
                 <span className="text-lg font-medium">{p.name}</span>
+                {p.is_combo && <span className="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent">Combo</span>}
               </div>
               <div className="flex items-center gap-4">
                 <span className={`text-xl font-bold ${p.stock <= p.min_stock ? 'text-destructive' : 'text-success'}`}>

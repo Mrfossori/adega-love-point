@@ -138,11 +138,17 @@ export default function PosPage() {
                 onClick={() => addItem(p)}
                 className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors border-b last:border-0"
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{p.name}</span>
-                  {p.is_combo && <Layers className="h-4 w-4 text-accent" />}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{p.name}</span>
+                    {p.is_combo && <Layers className="h-4 w-4 text-accent" />}
+                  </div>
+                  {p.barcode && <p className="text-xs text-muted-foreground">{p.barcode}</p>}
                 </div>
-                <span className="text-lg font-bold text-accent">R$ {Number(p.sale_price).toFixed(2)}</span>
+                <div className="flex items-center gap-4 shrink-0">
+                  <span className="text-sm text-muted-foreground">{p.stock} un</span>
+                  <span className="text-lg font-bold text-accent">R$ {Number(p.sale_price).toFixed(2)}</span>
+                </div>
               </button>
             ))}
           </div>

@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, ArrowDownToLine, SlidersHorizontal, Package, Download, Copy } from 'lucide-react';
+import ProductSearchSelect from '@/components/ProductSearchSelect';
+import { AlertTriangle, ArrowDownToLine, SlidersHorizontal, Package, Download, Copy, Search } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
@@ -20,6 +20,7 @@ export default function StockPage() {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
+  const [search, setSearch] = useState('');
 
   const refresh = useCallback(async () => {
     try {
@@ -76,8 +77,16 @@ export default function StockPage() {
     }
   }
 
+  const activeProducts = products.filter(p => p.is_active);
+  const filteredAll = search.trim()
+    ? activeProducts.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode || '').includes(search))
+    : activeProducts;
+  const filteredLow = search.trim()
+    ? lowStock.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode || '').includes(search))
+    : lowStock;
+
   function getExportData() {
-    const source = activeTab === 'low' ? lowStock : products.filter(p => p.is_active);
+    const source = activeTab === 'low' ? filteredLow : filteredAll;
     const headers = ['product_id', 'name', 'barcode', 'sale_price', 'cost_price', 'min_stock', 'current_stock', 'is_active'];
     const rows = source.map(p => [p.id, p.name, p.barcode || '', Number(p.sale_price), Number(p.cost_price), p.min_stock, p.stock, p.is_active ? 'Sim' : 'Não']);
     return { headers, rows };
@@ -109,12 +118,21 @@ export default function StockPage() {
         </Button>
       </div>
 
-      <div className="flex gap-2 justify-end">
-        <Button onClick={handleExportCsv} variant="outline" size="sm" className="gap-2">
-          <Download className="h-4 w-4" /> Exportar CSV
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome ou código de barras..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-10 h-14 text-lg bg-card"
+          />
+        </div>
+        <Button onClick={handleExportCsv} variant="outline" size="lg" className="h-14 px-4 gap-2">
+          <Download className="h-5 w-5" /> CSV
         </Button>
-        <Button onClick={handleCopyCsv} variant="outline" size="sm" className="gap-2">
-          <Copy className="h-4 w-4" /> Copiar p/ Sheets
+        <Button onClick={handleCopyCsv} variant="outline" size="lg" className="h-14 px-4 gap-2">
+          <Copy className="h-5 w-5" /> Sheets
         </Button>
       </div>
 
@@ -127,11 +145,14 @@ export default function StockPage() {
         </TabsList>
 
         <TabsContent value="all" className="space-y-2 mt-4">
-          {products.filter(p => p.is_active).map(p => (
+          {filteredAll.map(p => (
             <div key={p.id} className="flex items-center justify-between bg-card rounded-lg p-4 border">
               <div className="flex items-center gap-3">
                 <Package className="h-6 w-6 text-primary" />
-                <span className="text-lg font-medium">{p.name}</span>
+                <div>
+                  <span className="text-lg font-medium">{p.name}</span>
+                  {p.barcode && <p className="text-xs text-muted-foreground">{p.barcode}</p>}
+                </div>
                 {p.is_combo && <span className="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent">Combo</span>}
               </div>
               <div className="flex items-center gap-4">
@@ -142,16 +163,24 @@ export default function StockPage() {
               </div>
             </div>
           ))}
+          {filteredAll.length === 0 && (
+            <p className="text-center text-muted-foreground py-12 text-lg">Nenhum produto encontrado.</p>
+          )}
         </TabsContent>
 
         <TabsContent value="low" className="space-y-2 mt-4">
-          {lowStock.length === 0 ? (
-            <p className="text-center text-muted-foreground py-12 text-lg">Nenhum produto com estoque baixo 🎉</p>
-          ) : lowStock.map(p => (
+          {filteredLow.length === 0 ? (
+            <p className="text-center text-muted-foreground py-12 text-lg">
+              {search.trim() ? 'Nenhum produto encontrado.' : 'Nenhum produto com estoque baixo 🎉'}
+            </p>
+          ) : filteredLow.map(p => (
             <div key={p.id} className="flex items-center justify-between bg-destructive/10 rounded-lg p-4 border border-destructive/30">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="h-6 w-6 text-destructive" />
-                <span className="text-lg font-medium">{p.name}</span>
+                <div>
+                  <span className="text-lg font-medium">{p.name}</span>
+                  {p.barcode && <p className="text-xs text-muted-foreground">{p.barcode}</p>}
+                </div>
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-xl font-bold text-destructive">{p.stock} un</span>
@@ -172,16 +201,13 @@ export default function StockPage() {
           <div className="space-y-4">
             <div>
               <Label>Produto</Label>
-              <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-                <SelectTrigger className="h-12 text-base">
-                  <SelectValue placeholder="Selecione o produto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.filter(p => p.is_active).map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name} (atual: {p.stock})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ProductSearchSelect
+                products={activeProducts}
+                value={selectedProductId}
+                onSelect={setSelectedProductId}
+                showStock
+                placeholder="Buscar produto..."
+              />
             </div>
             <div>
               <Label>{movType === 'entry' ? 'Quantidade a adicionar' : 'Novo saldo'}</Label>

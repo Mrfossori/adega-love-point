@@ -23,6 +23,7 @@ export default function ProductsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [components, setComponents] = useState<ComponentRow[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
 
   const loadProducts = useCallback(async () => {
     try {

@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, Edit, Package, Download, Trash2, Layers } from 'lucide-react';
+import { Search, Plus, Edit, Package, Download, Upload, Trash2, Layers } from 'lucide-react';
 import { toast } from 'sonner';
+import ImportProductsModal from '@/components/ImportProductsModal';
 
 interface ComponentRow {
   component_product_id: string;
@@ -22,6 +23,7 @@ export default function ProductsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [components, setComponents] = useState<ComponentRow[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -137,6 +139,9 @@ export default function ProductsPage() {
         </div>
         <Button onClick={handleExportCsv} variant="outline" size="lg" className="h-14 px-4 gap-2">
           <Download className="h-5 w-5" /> CSV
+        </Button>
+        <Button onClick={() => setImportOpen(true)} variant="outline" size="lg" className="h-14 px-4 gap-2">
+          <Upload className="h-5 w-5" /> Importar
         </Button>
         <Button onClick={openNew} size="lg" className="h-14 px-6 text-lg gap-2">
           <Plus className="h-5 w-5" /> Novo Produto
@@ -272,6 +277,7 @@ export default function ProductsPage() {
           )}
         </DialogContent>
       </Dialog>
+      <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} onComplete={loadProducts} />
     </div>
   );
 }

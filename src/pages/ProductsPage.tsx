@@ -140,6 +140,9 @@ export default function ProductsPage() {
         <Button onClick={handleExportCsv} variant="outline" size="lg" className="h-14 px-4 gap-2">
           <Download className="h-5 w-5" /> CSV
         </Button>
+        <Button onClick={() => setImportOpen(true)} variant="outline" size="lg" className="h-14 px-4 gap-2">
+          <Upload className="h-5 w-5" /> Importar
+        </Button>
         <Button onClick={openNew} size="lg" className="h-14 px-6 text-lg gap-2">
           <Plus className="h-5 w-5" /> Novo Produto
         </Button>

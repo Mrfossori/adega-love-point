@@ -245,16 +245,15 @@ export default function ProductsPage() {
                   )}
                   {components.map((comp, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <Select value={comp.component_product_id} onValueChange={v => updateComponent(idx, 'component_product_id', v)}>
-                        <SelectTrigger className="flex-1 h-10">
-                          <SelectValue placeholder="Selecione..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableComponents.map(p => (
-                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex-1">
+                        <ProductSearchSelect
+                          products={availableComponents}
+                          value={comp.component_product_id}
+                          onSelect={v => updateComponent(idx, 'component_product_id', v)}
+                          showStock
+                          placeholder="Buscar componente..."
+                        />
+                      </div>
                       <Input
                         type="number"
                         step="0.01"

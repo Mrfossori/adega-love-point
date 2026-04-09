@@ -277,6 +277,7 @@ export default function ProductsPage() {
           )}
         </DialogContent>
       </Dialog>
+      <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} onComplete={loadProducts} />
     </div>
   );
 }

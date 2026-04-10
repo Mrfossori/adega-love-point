@@ -6,7 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Download, Copy, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Download, Copy, TrendingUp, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 const paymentLabels: Record<string, string> = {
@@ -33,6 +35,7 @@ export default function ReportsPage() {
   const [productSearch, setProductSearch] = useState('');
   const [sortBy, setSortBy] = useState<'qty' | 'revenue'>('qty');
   const [selectedProduct, setSelectedProduct] = useState<TopProduct | null>(null);
+  const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function load() {
@@ -87,7 +90,6 @@ export default function ReportsPage() {
       }
       entry.qty_sold += item.quantity;
       entry.revenue += Number(item.subtotal);
-      // Find the sale for date
       const sale = filteredSales.find(s => s.id === item.order_id);
       entry.details.push({
         order_id: item.order_id,
@@ -96,7 +98,6 @@ export default function ReportsPage() {
         subtotal: Number(item.subtotal),
       });
     }
-    // Count distinct orders per product
     for (const entry of map.values()) {
       entry.order_count = new Set(entry.details.map(d => d.order_id)).size;
     }
@@ -108,6 +109,15 @@ export default function ReportsPage() {
     result.sort((a, b) => sortBy === 'qty' ? b.qty_sold - a.qty_sold : b.revenue - a.revenue);
     return result;
   }, [filteredItems, filteredSales, productSearch, sortBy]);
+
+  function toggleSale(id: string | null) {
+    if (!id) return;
+    setExpandedSales(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   // CSV exports
   function exportSalesCsv() {
@@ -179,7 +189,7 @@ export default function ReportsPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <div className="bg-card border rounded-lg p-5 text-center">
           <p className="text-muted-foreground text-sm">Total Vendido</p>
           <p className="text-2xl font-bold text-accent mt-1">R$ {totalSold.toFixed(2)}</p>
@@ -196,28 +206,118 @@ export default function ReportsPage() {
           <p className="text-muted-foreground text-sm">Itens Vendidos</p>
           <p className="text-2xl font-bold mt-1">{totalItems}</p>
         </div>
-      </div>
-
-      {/* By payment */}
-      {Object.keys(byPayment).length > 0 && (
-        <div className="bg-card border rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-3">Por Forma de Pagamento</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-card border rounded-lg p-5 text-center col-span-2 sm:col-span-1">
+          <p className="text-muted-foreground text-sm">Formas Pgto</p>
+          <div className="mt-1 space-y-0.5">
             {Object.entries(byPayment).map(([method, value]) => (
-              <div key={method} className="bg-muted rounded-lg p-4 text-center">
-                <p className="text-sm text-muted-foreground">{paymentLabels[method] || method}</p>
-                <p className="text-xl font-bold text-accent">R$ {value.toFixed(2)}</p>
-              </div>
+              <p key={method} className="text-xs">
+                <span className="text-muted-foreground">{paymentLabels[method] || method}: </span>
+                <span className="font-semibold text-accent">R$ {value.toFixed(2)}</span>
+              </p>
             ))}
+            {Object.keys(byPayment).length === 0 && <p className="text-xs text-muted-foreground">—</p>}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Top Products */}
+      {/* Sales list with expandable items */}
+      <div className="bg-card border rounded-lg overflow-hidden">
+        <div className="p-4 border-b">
+          <h3 className="text-lg font-semibold">Lista de Vendas</h3>
+        </div>
+        {loading ? (
+          <p className="text-center text-muted-foreground py-12 text-lg">Carregando...</p>
+        ) : filteredSales.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12 text-lg">Nenhuma venda no período selecionado.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10"></TableHead>
+                <TableHead>Data / Hora</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Pagamento</TableHead>
+                <TableHead className="text-right">Itens</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredSales.map(sale => {
+                const isOpen = expandedSales.has(sale.id || '');
+                const saleItems = allItems.filter(i => i.order_id === sale.id);
+                return (
+                  <Collapsible key={sale.id} open={isOpen} onOpenChange={() => toggleSale(sale.id)} asChild>
+                    <>
+                      <CollapsibleTrigger asChild>
+                        <TableRow className="cursor-pointer">
+                          <TableCell className="w-10">
+                            {isOpen
+                              ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              : <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            }
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {sale.created_at ? new Date(sale.created_at).toLocaleString('pt-BR') : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">
+                              {sale.sale_type === 'presencial' ? 'Presencial' : 'Delivery'}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent">
+                              {paymentLabels[sale.payment_method || ''] || sale.payment_method}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-sm">{Number(sale.total_items)}</TableCell>
+                          <TableCell className="text-right font-bold text-accent">R$ {Number(sale.total).toFixed(2)}</TableCell>
+                        </TableRow>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent asChild>
+                        <tr>
+                          <td colSpan={6} className="p-0">
+                            <div className="bg-muted/30 px-6 py-3 border-t">
+                              <p className="text-xs font-medium text-muted-foreground mb-2">
+                                Itens da venda · Pedido {sale.id?.slice(0, 8)}
+                              </p>
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-xs text-muted-foreground">
+                                    <th className="text-left py-1 font-medium">Produto</th>
+                                    <th className="text-right py-1 font-medium">Qtd</th>
+                                    <th className="text-right py-1 font-medium">Preço Unit.</th>
+                                    <th className="text-right py-1 font-medium">Subtotal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {saleItems.map(item => (
+                                    <tr key={item.id} className="border-t border-border/50">
+                                      <td className="py-1.5">{item.product_name}</td>
+                                      <td className="text-right py-1.5">{item.quantity}</td>
+                                      <td className="text-right py-1.5">R$ {Number(item.unit_price).toFixed(2)}</td>
+                                      <td className="text-right py-1.5 font-medium text-accent">R$ {Number(item.subtotal).toFixed(2)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      </CollapsibleContent>
+                    </>
+                  </Collapsible>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+
+      {/* Products sold in period */}
       <div className="bg-card border rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-lg font-semibold flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-accent" /> Top Produtos
+            <TrendingUp className="h-5 w-5 text-accent" /> Produtos vendidos no período
           </h3>
           <div className="flex items-center gap-2">
             <Input
@@ -233,7 +333,6 @@ export default function ReportsPage() {
               className="gap-1 h-9"
             >
               {sortBy === 'qty' ? 'Ordenar: Qtd' : 'Ordenar: Receita'}
-              {sortBy === 'qty' ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
             </Button>
           </div>
         </div>
@@ -243,60 +342,33 @@ export default function ReportsPage() {
         ) : topProducts.length === 0 ? (
           <p className="text-center text-muted-foreground py-6">Nenhum dado no período.</p>
         ) : (
-          <div className="space-y-1">
-            <div className="grid grid-cols-4 gap-2 text-sm text-muted-foreground font-medium px-3 py-1">
-              <span>Produto</span>
-              <span className="text-right">Qtd</span>
-              <span className="text-right">Vendas</span>
-              <span className="text-right">Receita</span>
-            </div>
-            {topProducts.map((p, idx) => (
-              <button
-                key={p.product_id}
-                onClick={() => setSelectedProduct(p)}
-                className="w-full grid grid-cols-4 gap-2 items-center px-3 py-3 rounded-lg hover:bg-muted/50 transition-colors text-left"
-              >
-                <span className="text-base font-medium truncate">
-                  <span className="text-muted-foreground mr-2">{idx + 1}.</span>
-                  {p.product_name}
-                </span>
-                <span className="text-right text-base font-bold">{p.qty_sold}</span>
-                <span className="text-right text-base">{p.order_count}</span>
-                <span className="text-right text-base font-bold text-accent">R$ {p.revenue.toFixed(2)}</span>
-              </button>
-            ))}
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Produto</TableHead>
+                <TableHead className="text-right">Qtd Vendida</TableHead>
+                <TableHead className="text-right">Nº Vendas</TableHead>
+                <TableHead className="text-right">Receita</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {topProducts.map((p, idx) => (
+                <TableRow
+                  key={p.product_id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setSelectedProduct(p)}
+                >
+                  <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                  <TableCell className="font-medium">{p.product_name}</TableCell>
+                  <TableCell className="text-right font-bold">{p.qty_sold}</TableCell>
+                  <TableCell className="text-right">{p.order_count}</TableCell>
+                  <TableCell className="text-right font-bold text-accent">R$ {p.revenue.toFixed(2)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
-      </div>
-
-      {/* Sales list */}
-      <div className="space-y-2">
-        <h3 className="text-lg font-semibold">Lista de Vendas</h3>
-        {loading ? (
-          <p className="text-center text-muted-foreground py-12 text-lg">Carregando...</p>
-        ) : filteredSales.length === 0 ? (
-          <p className="text-center text-muted-foreground py-12 text-lg">Nenhuma venda no período selecionado.</p>
-        ) : filteredSales.map(sale => (
-          <div key={sale.id} className="bg-card border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">
-                  {sale.created_at ? new Date(sale.created_at).toLocaleString('pt-BR') : '—'}
-                </span>
-                <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">
-                  {sale.sale_type === 'presencial' ? 'Presencial' : 'Delivery'}
-                </span>
-                <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent">
-                  {paymentLabels[sale.payment_method || ''] || sale.payment_method}
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground">{Number(sale.total_items)} itens</span>
-                <span className="text-xl font-bold text-accent">R$ {Number(sale.total).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        ))}
       </div>
 
       {/* Product detail dialog */}

@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Package, Warehouse, ShoppingCart, BarChart3, Wine } from 'lucide-react';
+import { Package, Warehouse, ShoppingCart, BarChart3, Wine, LayoutDashboard } from 'lucide-react';
+import DashboardPage from '@/pages/DashboardPage';
 import ProductsPage from '@/pages/ProductsPage';
 import StockPage from '@/pages/StockPage';
 import PosPage from '@/pages/PosPage';
 import ReportsPage from '@/pages/ReportsPage';
 
 const tabs = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'pos', label: 'PDV', icon: ShoppingCart },
   { id: 'products', label: 'Produtos', icon: Package },
   { id: 'stock', label: 'Estoque', icon: Warehouse },
@@ -15,7 +17,7 @@ const tabs = [
 type Tab = typeof tabs[number]['id'];
 
 export default function Index() {
-  const [activeTab, setActiveTab] = useState<Tab>('pos');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -45,6 +47,7 @@ export default function Index() {
 
       {/* Content */}
       <main className="flex-1 p-6 overflow-y-auto">
+        {activeTab === 'dashboard' && <DashboardPage />}
         {activeTab === 'pos' && <PosPage />}
         {activeTab === 'products' && <ProductsPage />}
         {activeTab === 'stock' && <StockPage />}

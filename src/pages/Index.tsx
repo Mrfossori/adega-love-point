@@ -47,6 +47,7 @@ export default function Index() {
 
       {/* Content */}
       <main className="flex-1 p-6 overflow-y-auto">
+        {activeTab === 'dashboard' && <DashboardPage />}
         {activeTab === 'pos' && <PosPage />}
         {activeTab === 'products' && <ProductsPage />}
         {activeTab === 'stock' && <StockPage />}

@@ -53,6 +53,7 @@ export default function Index() {
         {activeTab === 'pos' && <PosPage />}
         {activeTab === 'products' && <ProductsPage />}
         {activeTab === 'stock' && <StockPage />}
+        {activeTab === 'finance' && <FinancePage />}
         {activeTab === 'reports' && <ReportsPage />}
       </main>
     </div>

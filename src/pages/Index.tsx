@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { Package, Warehouse, ShoppingCart, BarChart3, Wine, LayoutDashboard } from 'lucide-react';
+import { Package, Warehouse, ShoppingCart, BarChart3, Wine, LayoutDashboard, DollarSign } from 'lucide-react';
 import DashboardPage from '@/pages/DashboardPage';
 import ProductsPage from '@/pages/ProductsPage';
 import StockPage from '@/pages/StockPage';
 import PosPage from '@/pages/PosPage';
 import ReportsPage from '@/pages/ReportsPage';
+import FinancePage from '@/pages/FinancePage';
 
 const tabs = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'pos', label: 'PDV', icon: ShoppingCart },
   { id: 'products', label: 'Produtos', icon: Package },
   { id: 'stock', label: 'Estoque', icon: Warehouse },
+  { id: 'finance', label: 'Financeiro', icon: DollarSign },
   { id: 'reports', label: 'Relatórios', icon: BarChart3 },
 ] as const;
 
@@ -51,6 +53,7 @@ export default function Index() {
         {activeTab === 'pos' && <PosPage />}
         {activeTab === 'products' && <ProductsPage />}
         {activeTab === 'stock' && <StockPage />}
+        {activeTab === 'finance' && <FinancePage />}
         {activeTab === 'reports' && <ReportsPage />}
       </main>
     </div>

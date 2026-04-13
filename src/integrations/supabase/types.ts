@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      finance_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          due_date: string | null
+          entry_type: Database["public"]["Enums"]["finance_entry_type"]
+          id: string
+          notes: string | null
+          payment_date: string | null
+          payment_method: string | null
+          source_id: string | null
+          source_type: Database["public"]["Enums"]["finance_source_type"]
+          status: Database["public"]["Enums"]["finance_entry_status"]
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          due_date?: string | null
+          entry_type: Database["public"]["Enums"]["finance_entry_type"]
+          id?: string
+          notes?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          source_id?: string | null
+          source_type: Database["public"]["Enums"]["finance_source_type"]
+          status?: Database["public"]["Enums"]["finance_entry_status"]
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          due_date?: string | null
+          entry_type?: Database["public"]["Enums"]["finance_entry_type"]
+          id?: string
+          notes?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          source_id?: string | null
+          source_type?: Database["public"]["Enums"]["finance_source_type"]
+          status?: Database["public"]["Enums"]["finance_entry_status"]
+        }
+        Relationships: []
+      }
       inventory_movements: {
         Row: {
           created_at: string
@@ -209,6 +251,104 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_purchase_items: {
+        Row: {
+          id: string
+          line_total: number
+          product_id: string
+          quantity: number
+          stock_purchase_id: string
+          unit_cost: number
+        }
+        Insert: {
+          id?: string
+          line_total: number
+          product_id: string
+          quantity: number
+          stock_purchase_id: string
+          unit_cost: number
+        }
+        Update: {
+          id?: string
+          line_total?: number
+          product_id?: string
+          quantity?: number
+          stock_purchase_id?: string
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_purchase_items_stock_purchase_id_fkey"
+            columns: ["stock_purchase_id"]
+            isOneToOne: false
+            referencedRelation: "stock_purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_purchases: {
+        Row: {
+          created_at: string
+          due_date: string | null
+          expected_receipt_date: string | null
+          id: string
+          notes: string | null
+          payment_method: string | null
+          payment_recorded_at: string | null
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          purchase_date: string
+          stock_received_at: string | null
+          stock_status: Database["public"]["Enums"]["stock_purchase_status"]
+          supplier_id: string | null
+          total_amount: number
+        }
+        Insert: {
+          created_at?: string
+          due_date?: string | null
+          expected_receipt_date?: string | null
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+          payment_recorded_at?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          purchase_date?: string
+          stock_received_at?: string | null
+          stock_status?: Database["public"]["Enums"]["stock_purchase_status"]
+          supplier_id?: string | null
+          total_amount?: number
+        }
+        Update: {
+          created_at?: string
+          due_date?: string | null
+          expected_receipt_date?: string | null
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+          payment_recorded_at?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          purchase_date?: string
+          stock_received_at?: string | null
+          stock_status?: Database["public"]["Enums"]["stock_purchase_status"]
+          supplier_id?: string | null
+          total_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_purchases_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stock_snapshot: {
         Row: {
           id: string
@@ -238,6 +378,33 @@ export type Database = {
           },
         ]
       }
+      suppliers: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          tax_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          tax_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          tax_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       v_sales_report: {
@@ -256,8 +423,17 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      finance_entry_status: "pending" | "paid" | "cancelled"
+      finance_entry_type: "income" | "expense"
+      finance_source_type:
+        | "stock_purchase"
+        | "operational_expense"
+        | "sale"
+        | "manual"
       movement_direction: "IN" | "OUT"
       movement_reason: "purchase" | "sale" | "adjustment"
+      payment_status: "unpaid" | "paid" | "cancelled"
+      stock_purchase_status: "pending_receipt" | "received" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -385,8 +561,18 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      finance_entry_status: ["pending", "paid", "cancelled"],
+      finance_entry_type: ["income", "expense"],
+      finance_source_type: [
+        "stock_purchase",
+        "operational_expense",
+        "sale",
+        "manual",
+      ],
       movement_direction: ["IN", "OUT"],
       movement_reason: ["purchase", "sale", "adjustment"],
+      payment_status: ["unpaid", "paid", "cancelled"],
+      stock_purchase_status: ["pending_receipt", "received", "cancelled"],
     },
   },
 } as const

@@ -116,18 +116,8 @@ export default function FinancePage() {
         </TabsList>
 
         <TabsContent value="purchases"><PurchasesTab /></TabsContent>
-        <TabsContent value="expenses">
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Construction className="h-12 w-12 mb-4" />
-            <p className="text-lg">Despesas — em breve</p>
-          </div>
-        </TabsContent>
-        <TabsContent value="payables">
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Construction className="h-12 w-12 mb-4" />
-            <p className="text-lg">Contas a Pagar — em breve</p>
-          </div>
-        </TabsContent>
+        <TabsContent value="expenses"><ExpensesTab /></TabsContent>
+        <TabsContent value="payables"><AccountsPayableTab /></TabsContent>
         <TabsContent value="fin_dashboard">
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <Construction className="h-12 w-12 mb-4" />

@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      expense_categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       finance_entries: {
         Row: {
           amount: number
@@ -90,6 +108,59 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operational_expenses: {
+        Row: {
+          amount: number
+          category_id: string | null
+          created_at: string
+          description: string
+          due_date: string | null
+          expense_date: string
+          finance_entry_id: string | null
+          id: string
+          notes: string | null
+          payment_method: string | null
+          payment_status: string
+          supplier_name: string | null
+        }
+        Insert: {
+          amount: number
+          category_id?: string | null
+          created_at?: string
+          description: string
+          due_date?: string | null
+          expense_date?: string
+          finance_entry_id?: string | null
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+          payment_status?: string
+          supplier_name?: string | null
+        }
+        Update: {
+          amount?: number
+          category_id?: string | null
+          created_at?: string
+          description?: string
+          due_date?: string | null
+          expense_date?: string
+          finance_entry_id?: string | null
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+          payment_status?: string
+          supplier_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operational_expenses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
             referencedColumns: ["id"]
           },
         ]

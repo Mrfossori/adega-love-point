@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -11,12 +12,21 @@ import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 import ProductSearchSelect from '@/components/ProductSearchSelect';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, isAfter, isBefore, addDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Plus, Trash2, Search, Package, Eye, CheckCircle, Banknote, Truck, Construction } from 'lucide-react';
+import { CalendarIcon, Plus, Trash2, Search, Package, Eye, CheckCircle, Banknote, Truck, Construction, Pencil, AlertTriangle, Clock, FileText, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getProductsWithStock, addInventoryMovement, type Product } from '@/lib/store';
+
+// ---------- shared types ----------
+interface ExpenseCategory { id: string; name: string; }
+interface OperationalExpense {
+  id: string; category_id: string | null; description: string; amount: number;
+  expense_date: string; due_date: string | null; payment_status: string;
+  payment_method: string | null; supplier_name: string | null; notes: string | null;
+  finance_entry_id: string | null; created_at: string; category_name?: string;
+}
 
 // ---------- types ----------
 interface Supplier {
@@ -106,18 +116,8 @@ export default function FinancePage() {
         </TabsList>
 
         <TabsContent value="purchases"><PurchasesTab /></TabsContent>
-        <TabsContent value="expenses">
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Construction className="h-12 w-12 mb-4" />
-            <p className="text-lg">Despesas — em breve</p>
-          </div>
-        </TabsContent>
-        <TabsContent value="payables">
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Construction className="h-12 w-12 mb-4" />
-            <p className="text-lg">Contas a Pagar — em breve</p>
-          </div>
-        </TabsContent>
+        <TabsContent value="expenses"><ExpensesTab /></TabsContent>
+        <TabsContent value="payables"><AccountsPayableTab /></TabsContent>
         <TabsContent value="fin_dashboard">
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <Construction className="h-12 w-12 mb-4" />
@@ -695,5 +695,495 @@ function PurchaseDetailDialog({ purchase, products, onClose, onUpdated }: {
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ===================== EXPENSES TAB =====================
+function ExpensesTab() {
+  const [expenses, setExpenses] = useState<OperationalExpense[]>([]);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterPayment, setFilterPayment] = useState('all');
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterStart, setFilterStart] = useState<Date | undefined>();
+  const [filterEnd, setFilterEnd] = useState<Date | undefined>();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<OperationalExpense | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [{ data: eData }, { data: cData }] = await Promise.all([
+        supabase.from('operational_expenses').select('*').order('expense_date', { ascending: false }),
+        supabase.from('expense_categories').select('*').order('name'),
+      ]);
+      const catMap = new Map((cData || []).map((c: any) => [c.id, c.name]));
+      setExpenses((eData || []).map((e: any) => ({ ...e, category_name: catMap.get(e.category_id) || 'Sem categoria' })));
+      setCategories(cData || []);
+    } catch (e: any) { toast.error('Erro: ' + e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const filtered = expenses.filter(e => {
+    if (filterCategory !== 'all' && e.category_id !== filterCategory) return false;
+    if (filterPayment !== 'all' && e.payment_status !== filterPayment) return false;
+    if (filterSearch) {
+      const q = filterSearch.toLowerCase();
+      if (!e.description.toLowerCase().includes(q) && !(e.supplier_name || '').toLowerCase().includes(q)) return false;
+    }
+    if (filterStart && new Date(e.expense_date) < filterStart) return false;
+    if (filterEnd && new Date(e.expense_date) > filterEnd) return false;
+    return true;
+  });
+
+  if (loading) return <p className="text-center text-muted-foreground py-12 text-lg">Carregando...</p>;
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Button onClick={() => { setEditingExpense(null); setFormOpen(true); }} size="lg" className="h-14 px-6 text-lg gap-2">
+        <Plus className="h-5 w-5" /> Nova Despesa
+      </Button>
+
+      {/* Filters */}
+      <div className="flex gap-3 flex-wrap items-end">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input value={filterSearch} onChange={e => setFilterSearch(e.target.value)} placeholder="Descrição ou fornecedor" className="pl-9 h-10 w-[220px]" />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Categoria</Label>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[160px] h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Pagamento</Label>
+          <Select value={filterPayment} onValueChange={setFilterPayment}>
+            <SelectTrigger className="w-[140px] h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="unpaid">Não Pago</SelectItem>
+              <SelectItem value="paid">Pago</SelectItem>
+              <SelectItem value="cancelled">Cancelado</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Data Início</Label>
+          <DatePicker date={filterStart} onSelect={setFilterStart} placeholder="Início" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Data Fim</Label>
+          <DatePicker date={filterEnd} onSelect={setFilterEnd} placeholder="Fim" />
+        </div>
+        {(filterCategory !== 'all' || filterPayment !== 'all' || filterSearch || filterStart || filterEnd) && (
+          <Button variant="ghost" size="sm" onClick={() => { setFilterCategory('all'); setFilterPayment('all'); setFilterSearch(''); setFilterStart(undefined); setFilterEnd(undefined); }}>
+            Limpar filtros
+          </Button>
+        )}
+      </div>
+
+      {/* List */}
+      <div className="space-y-2">
+        {filtered.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12 text-lg">Nenhuma despesa encontrada.</p>
+        ) : filtered.map(e => (
+          <div key={e.id} className="bg-card rounded-lg border p-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">{e.description}</p>
+                <p className="text-xs text-muted-foreground">
+                  {fmtDate(e.expense_date)} • {e.category_name}
+                  {e.supplier_name && ` • ${e.supplier_name}`}
+                  {e.due_date && ` • Venc: ${fmtDate(e.due_date)}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                {payStatusBadge(e.payment_status)}
+                <span className="text-lg font-bold">{fmtMoney(e.amount)}</span>
+                <Button variant="ghost" size="icon" onClick={() => { setEditingExpense(e); setFormOpen(true); }}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {formOpen && (
+        <ExpenseFormDialog
+          open={formOpen}
+          onClose={() => { setFormOpen(false); setEditingExpense(null); }}
+          categories={categories}
+          expense={editingExpense}
+          onSaved={refresh}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===================== EXPENSE FORM DIALOG =====================
+function ExpenseFormDialog({ open, onClose, categories, expense, onSaved }: {
+  open: boolean; onClose: () => void; categories: ExpenseCategory[];
+  expense: OperationalExpense | null; onSaved: () => void;
+}) {
+  const isEdit = !!expense;
+  const [categoryId, setCategoryId] = useState(expense?.category_id || '');
+  const [description, setDescription] = useState(expense?.description || '');
+  const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
+  const [expenseDate, setExpenseDate] = useState<Date>(expense ? new Date(expense.expense_date) : new Date());
+  const [dueDate, setDueDate] = useState<Date | undefined>(expense?.due_date ? new Date(expense.due_date) : undefined);
+  const [paymentStatus, setPaymentStatus] = useState(expense?.payment_status || 'unpaid');
+  const [paymentMethod, setPaymentMethod] = useState(expense?.payment_method || '');
+  const [supplierName, setSupplierName] = useState(expense?.supplier_name || '');
+  const [notes, setNotes] = useState(expense?.notes || '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (!description.trim()) { toast.error('Descrição obrigatória'); return; }
+    if (!amount || Number(amount) <= 0) { toast.error('Valor inválido'); return; }
+    setSaving(true);
+    try {
+      const record: any = {
+        category_id: categoryId || null,
+        description: description.trim(),
+        amount: Number(amount),
+        expense_date: format(expenseDate, 'yyyy-MM-dd'),
+        due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
+        payment_status: paymentStatus,
+        payment_method: paymentMethod || null,
+        supplier_name: supplierName || null,
+        notes: notes || null,
+      };
+
+      if (isEdit) {
+        const prevStatus = expense!.payment_status;
+        const { error } = await supabase.from('operational_expenses').update(record).eq('id', expense!.id);
+        if (error) throw error;
+
+        // If changing to paid and no finance entry yet
+        if (paymentStatus === 'paid' && prevStatus !== 'paid' && !expense!.finance_entry_id) {
+          const { data: fe, error: fErr } = await supabase.from('finance_entries').insert({
+            entry_type: 'expense' as any,
+            source_type: 'operational_expense' as any,
+            source_id: expense!.id,
+            amount: Number(amount),
+            status: 'paid' as any,
+            payment_date: format(new Date(), 'yyyy-MM-dd'),
+            payment_method: paymentMethod || null,
+            due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
+            notes: `Despesa: ${description.trim()}`,
+          }).select().single();
+          if (fErr) throw fErr;
+          await supabase.from('operational_expenses').update({ finance_entry_id: fe.id }).eq('id', expense!.id);
+        }
+        toast.success('Despesa atualizada!');
+      } else {
+        // Create new expense
+        const { data: newExp, error } = await supabase.from('operational_expenses').insert(record).select().single();
+        if (error) throw error;
+
+        // Create finance entry
+        const feStatus = paymentStatus === 'paid' ? 'paid' : 'pending';
+        const { data: fe, error: fErr } = await supabase.from('finance_entries').insert({
+          entry_type: 'expense' as any,
+          source_type: 'operational_expense' as any,
+          source_id: newExp.id,
+          amount: Number(amount),
+          status: feStatus as any,
+          payment_date: paymentStatus === 'paid' ? format(new Date(), 'yyyy-MM-dd') : null,
+          payment_method: paymentMethod || null,
+          due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
+          notes: `Despesa: ${description.trim()}`,
+        }).select().single();
+        if (fErr) throw fErr;
+        await supabase.from('operational_expenses').update({ finance_entry_id: fe.id }).eq('id', newExp.id);
+        toast.success('Despesa registrada!');
+      }
+      onClose();
+      onSaved();
+    } catch (e: any) { toast.error('Erro: ' + e.message); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="text-xl">{isEdit ? 'Editar Despesa' : 'Nova Despesa'}</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label>Descrição *</Label>
+            <Input value={description} onChange={e => setDescription(e.target.value)} className="h-12 text-lg" placeholder="Ex: Aluguel janeiro" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Categoria</Label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger className="h-12"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Valor *</Label>
+              <Input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="h-12" min="0" step="0.01" placeholder="0.00" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Data Despesa *</Label>
+              <DatePicker date={expenseDate} onSelect={d => d && setExpenseDate(d)} placeholder="Data" />
+            </div>
+            <div>
+              <Label>Vencimento</Label>
+              <DatePicker date={dueDate} onSelect={setDueDate} placeholder="Vencimento" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Status Pagamento</Label>
+              <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unpaid">Não Pago</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Forma de Pagamento</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger className="h-12"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Dinheiro</SelectItem>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="card">Cartão</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="transfer">Transferência</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <Label>Fornecedor / Prestador</Label>
+            <Input value={supplierName} onChange={e => setSupplierName(e.target.value)} className="h-12" placeholder="Ex: Imobiliária ABC" />
+          </div>
+          <div>
+            <Label>Observações</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+          </div>
+          <Button onClick={handleSave} disabled={saving} className="w-full h-14 text-lg">
+            {saving ? 'Salvando...' : isEdit ? 'Salvar Alterações' : 'Registrar Despesa'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ===================== ACCOUNTS PAYABLE TAB =====================
+function AccountsPayableTab() {
+  const [payables, setPayables] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState('all');
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterStart, setFilterStart] = useState<Date | undefined>();
+  const [filterEnd, setFilterEnd] = useState<Date | undefined>();
+
+  const refresh = useCallback(async () => {
+    try {
+      const [{ data: purchases }, { data: expenses }, { data: suppliers }] = await Promise.all([
+        supabase.from('stock_purchases').select('*').eq('payment_status', 'unpaid'),
+        supabase.from('operational_expenses').select('*').eq('payment_status', 'unpaid'),
+        supabase.from('suppliers').select('id, name'),
+      ]);
+      const supplierMap = new Map((suppliers || []).map((s: any) => [s.id, s.name]));
+
+      const items: any[] = [];
+      (purchases || []).forEach((p: any) => {
+        items.push({
+          id: p.id, type: 'purchase', description: supplierMap.get(p.supplier_id) || 'Compra de estoque',
+          due_date: p.due_date, amount: p.total_amount, status: p.payment_status, source: p,
+        });
+      });
+      (expenses || []).forEach((e: any) => {
+        items.push({
+          id: e.id, type: 'expense', description: e.description + (e.supplier_name ? ` (${e.supplier_name})` : ''),
+          due_date: e.due_date, amount: e.amount, status: e.payment_status, source: e,
+        });
+      });
+      items.sort((a, b) => {
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      });
+      setPayables(items);
+    } catch (e: any) { toast.error('Erro: ' + e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const today = startOfDay(new Date());
+  const endOfWeek = addDays(today, 7);
+
+  const totalUnpaid = payables.reduce((s, p) => s + Number(p.amount), 0);
+  const overdue = payables.filter(p => p.due_date && isBefore(new Date(p.due_date), today));
+  const overdueTotal = overdue.reduce((s, p) => s + Number(p.amount), 0);
+  const dueThisWeek = payables.filter(p => p.due_date && !isBefore(new Date(p.due_date), today) && isBefore(new Date(p.due_date), endOfWeek));
+  const dueThisWeekTotal = dueThisWeek.reduce((s, p) => s + Number(p.amount), 0);
+
+  const filtered = payables.filter(p => {
+    if (filterType !== 'all' && p.type !== filterType) return false;
+    if (filterSearch) {
+      const q = filterSearch.toLowerCase();
+      if (!p.description.toLowerCase().includes(q)) return false;
+    }
+    if (filterStart && p.due_date && new Date(p.due_date) < filterStart) return false;
+    if (filterEnd && p.due_date && new Date(p.due_date) > filterEnd) return false;
+    return true;
+  });
+
+  async function handleMarkPaid(item: any) {
+    try {
+      if (item.type === 'purchase') {
+        const src = item.source;
+        if (src.payment_recorded_at) { toast.error('Pagamento já registrado.'); return; }
+        const { error: fErr } = await supabase.from('finance_entries').insert({
+          entry_type: 'expense' as any, source_type: 'stock_purchase' as any, source_id: src.id,
+          amount: src.total_amount, status: 'paid' as any,
+          payment_date: format(new Date(), 'yyyy-MM-dd'), notes: `Pagamento compra ${src.id.slice(0, 8)}`,
+        });
+        if (fErr) throw fErr;
+        const { error } = await supabase.from('stock_purchases').update({
+          payment_status: 'paid' as any, payment_recorded_at: new Date().toISOString(),
+        }).eq('id', src.id);
+        if (error) throw error;
+      } else {
+        const src = item.source;
+        if (src.finance_entry_id) {
+          // Update existing finance entry
+          await supabase.from('finance_entries').update({
+            status: 'paid' as any, payment_date: format(new Date(), 'yyyy-MM-dd'),
+          }).eq('id', src.finance_entry_id);
+        } else {
+          const { data: fe, error: fErr } = await supabase.from('finance_entries').insert({
+            entry_type: 'expense' as any, source_type: 'operational_expense' as any, source_id: src.id,
+            amount: src.amount, status: 'paid' as any,
+            payment_date: format(new Date(), 'yyyy-MM-dd'), notes: `Despesa: ${src.description}`,
+          }).select().single();
+          if (fErr) throw fErr;
+          await supabase.from('operational_expenses').update({ finance_entry_id: fe.id }).eq('id', src.id);
+        }
+        await supabase.from('operational_expenses').update({ payment_status: 'paid' }).eq('id', src.id);
+      }
+      toast.success('Pagamento registrado!');
+      refresh();
+    } catch (e: any) { toast.error('Erro: ' + e.message); }
+  }
+
+  if (loading) return <p className="text-center text-muted-foreground py-12 text-lg">Carregando...</p>;
+
+  return (
+    <div className="space-y-4 mt-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><FileText className="h-4 w-4" /> Total a Pagar</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-bold">{fmtMoney(totalUnpaid)}</p><p className="text-xs text-muted-foreground">{payables.length} conta(s)</p></CardContent>
+        </Card>
+        <Card className={overdueTotal > 0 ? 'border-destructive' : ''}>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Vencidas</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-bold text-destructive">{fmtMoney(overdueTotal)}</p><p className="text-xs text-muted-foreground">{overdue.length} conta(s)</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><Clock className="h-4 w-4" /> Vence esta semana</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-bold">{fmtMoney(dueThisWeekTotal)}</p><p className="text-xs text-muted-foreground">{dueThisWeek.length} conta(s)</p></CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-3 flex-wrap items-end">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Buscar</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input value={filterSearch} onChange={e => setFilterSearch(e.target.value)} placeholder="Descrição ou fornecedor" className="pl-9 h-10 w-[220px]" />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Tipo</Label>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-[160px] h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="purchase">Compras</SelectItem>
+              <SelectItem value="expense">Despesas</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Venc. Início</Label>
+          <DatePicker date={filterStart} onSelect={setFilterStart} placeholder="Início" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Venc. Fim</Label>
+          <DatePicker date={filterEnd} onSelect={setFilterEnd} placeholder="Fim" />
+        </div>
+        {(filterType !== 'all' || filterSearch || filterStart || filterEnd) && (
+          <Button variant="ghost" size="sm" onClick={() => { setFilterType('all'); setFilterSearch(''); setFilterStart(undefined); setFilterEnd(undefined); }}>
+            Limpar filtros
+          </Button>
+        )}
+      </div>
+
+      {/* List */}
+      <div className="space-y-2">
+        {filtered.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12 text-lg">Nenhuma conta a pagar encontrada.</p>
+        ) : filtered.map(p => {
+          const isOverdue = p.due_date && isBefore(new Date(p.due_date), today);
+          return (
+            <div key={`${p.type}-${p.id}`} className={cn("bg-card rounded-lg border p-4", isOverdue && "border-destructive/50")}>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {p.type === 'purchase' ? 'Compra' : 'Despesa'}
+                    </Badge>
+                    {isOverdue && <Badge variant="destructive" className="text-xs">Vencida</Badge>}
+                  </div>
+                  <p className="text-sm font-medium">{p.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Venc: {fmtDate(p.due_date)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-lg font-bold">{fmtMoney(p.amount)}</span>
+                  <Button size="sm" className="gap-1 h-9" onClick={() => handleMarkPaid(p)}>
+                    <CheckCircle className="h-4 w-4" /> Pagar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

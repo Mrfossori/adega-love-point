@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -11,12 +12,21 @@ import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 import ProductSearchSelect from '@/components/ProductSearchSelect';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, isAfter, isBefore, addDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Plus, Trash2, Search, Package, Eye, CheckCircle, Banknote, Truck, Construction } from 'lucide-react';
+import { CalendarIcon, Plus, Trash2, Search, Package, Eye, CheckCircle, Banknote, Truck, Construction, Pencil, AlertTriangle, Clock, FileText, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getProductsWithStock, addInventoryMovement, type Product } from '@/lib/store';
+
+// ---------- shared types ----------
+interface ExpenseCategory { id: string; name: string; }
+interface OperationalExpense {
+  id: string; category_id: string | null; description: string; amount: number;
+  expense_date: string; due_date: string | null; payment_status: string;
+  payment_method: string | null; supplier_name: string | null; notes: string | null;
+  finance_entry_id: string | null; created_at: string; category_name?: string;
+}
 
 // ---------- types ----------
 interface Supplier {

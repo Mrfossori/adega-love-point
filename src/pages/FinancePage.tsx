@@ -18,6 +18,7 @@ import { CalendarIcon, Plus, Trash2, Search, Package, Eye, CheckCircle, Banknote
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getProductsWithStock, addInventoryMovement, type Product } from '@/lib/store';
+import FinancialDashboard from '@/components/FinancialDashboard';
 
 // ---------- shared types ----------
 interface ExpenseCategory { id: string; name: string; }
@@ -119,10 +120,7 @@ export default function FinancePage() {
         <TabsContent value="expenses"><ExpensesTab /></TabsContent>
         <TabsContent value="payables"><AccountsPayableTab /></TabsContent>
         <TabsContent value="fin_dashboard">
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Construction className="h-12 w-12 mb-4" />
-            <p className="text-lg">Painel Financeiro — em breve</p>
-          </div>
+          <FinancialDashboard />
         </TabsContent>
       </Tabs>
     </div>

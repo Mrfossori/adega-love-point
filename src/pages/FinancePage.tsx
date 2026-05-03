@@ -18,6 +18,7 @@ import { CalendarIcon, Plus, Trash2, Search, Package, Eye, CheckCircle, Banknote
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getProductsWithStock, addInventoryMovement, type Product } from '@/lib/store';
+import FinancialDashboard from '@/components/FinancialDashboard';
 
 // ---------- shared types ----------
 interface ExpenseCategory { id: string; name: string; }
